@@ -1,4 +1,6 @@
 #-*- coding: utf-8 -*-
+import sys
+sys.path.append('../')
 import argparse
 import tensorflow as tf
 import pickle

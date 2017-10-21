@@ -102,8 +102,8 @@ class Melody:
 
         offset_in_a_measure = []
         for o in input_melody:
-            offset_in_a_measure.append(round((_offset - o['offset'])/0.25))
-
+            offset_in_a_measure.append(round((o['offset']-_offset)/0.25))
+        print('offset_in_a_measure : ', offset_in_a_measure)
         for i in range(1, len(input_melody)):
             if offset_in_a_measure[i] > offset_in_a_measure[i-1]:
                 tmp_dict = dict()
@@ -111,7 +111,8 @@ class Melody:
                 tmp_dict['offset'] = (offset_in_a_measure[i] * 0.25)
 
                 input_melody_parsed.append(tmp_dict)
-
+        
+        print('parsed input:', input_melody_parsed)
 
         ## prepare as an batch
         def get_input_batch_sequence(input_seq, sequence_length):
@@ -161,8 +162,6 @@ class Melody:
 
             return output_sequence
 
-        print(input_melody)
-
         output_note_sequence = []
         curve_arr = create_curve_seq(input_melody_parsed)
 
@@ -177,11 +176,13 @@ class Melody:
                 curr_note_info['pitch'] = curr_note + vec[0] 
                 curr_offset += vec[1]
                 curr_note_info['offset'] = curr_offset
-                curr_note_info['duration'] = 0.5
+                curr_note_info['duration'] = 0.25
                 curr_note_info['velocity'] = 120
 
                 output_note_sequence.append(curr_note_info)
-
+	
+        print('input melody:', input_melody)
+        print('output note sequence:', output_note_sequence)
         return output_note_sequence
 
 
