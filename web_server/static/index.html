@@ -1,0 +1,459 @@
+<html>
+  <head>
+    <script src="js/audiokeys.js"></script>
+    <script src="js/jquery-3.2.1.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.js"></script>
+
+    <script src="js/platform.js"></script>
+    <!-- <script type="text/javascript" src="js/midi.js"></script>
+    <script type="text/javascript" src="js/waveshaper.js"></script>
+    <script type="text/javascript" src="js/synth.js"></script> -->
+
+    <style>
+      img
+      {
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+
+    <label for="rows">Keyboard Layout:</label>
+    <select name="rows" id="row-select">
+      <option value="1">1 Row</option>
+      <option value="2">2 Rows</option>
+    </select><br>
+
+    <label for="polyphony">Polyphony:</label>
+    <select name="polyphony" id="polyphony">
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+    </select><br>
+
+    <label for="priority">Priority:</label>
+    <select name="priority" id="priority">
+      <option value="last">Last</option>
+      <option value="first">First</option>
+      <option value="lowest">Lowest</option>
+      <option value="highest">Highest</option>
+    </select>
+
+    <p></p>
+    <hr>
+
+    <img id="image1" src="images/audiokeys-mapping-rows1.jpg" alt="">
+    <img id="image2" src="images/audiokeys-mapping-rows2.jpg" style="display: none" alt="">
+    <div id="synthbox">
+      <!--
+              <div class="knobContainer" id="fControl" style="left: 10px; top: 10px;">
+                  <input class="knob" data-width=100 data-angleOffset=-125 data-angleArc=250 data-fgColor="#66EE66" value="35">
+                  <div class="knobLabel">frequency</div>
+              </div>
+      -->
+    </div>
+    
+    <script>
+      var socket;
+			$(document).ready(function(){
+        // initAudio();
+        if (navigator.requestMIDIAccess)
+          navigator.requestMIDIAccess().then( onMIDIStarted, onMIDISystemError );
+
+
+				socket = io.connect('/visual');
+				socket.on('music_signal', function (data) {
+					console.log(data);  
+				});
+				
+			});
+
+      window.context  = new AudioContext();
+      window.keyboard = new AudioKeys({
+        polyphony: 1,
+        rows: 1,
+        priority: 'last'
+      });
+
+      var oneRowLayout = true;
+      var image1 = document.querySelector('#image1');
+      var image2 = document.querySelector('#image2');
+
+      var polyphony = document.querySelector('#polyphony');
+      var priority = document.querySelector('#priority');
+
+      document.querySelector('#row-select').addEventListener('change', function(e) {
+        oneRowLayout = !oneRowLayout;
+        image1.style.display = oneRowLayout ? 'block' : 'none';
+        image2.style.display = oneRowLayout ? 'none' : 'block';
+        keyboard.set('rows', oneRowLayout ? 1 : 2);
+      });
+
+      polyphony.addEventListener('change', function(e) {
+        keyboard.set('polyphony', +e.target.value);
+      });
+
+      priority.addEventListener('change', function(e) {
+        keyboard.set('priority', e.target.value);
+      });
+
+      var MAX_MELODY_NUM = 10;  // 키보드 입력이 10개가 누적되면 서버로 보내어 대응되는 멜로디를 받아옴.
+      var MELODY_INTERVAL_SEC = 3;    // 3초가 키보드 입력이 없으면 그 동안 쌓아놓은 멜로디를 서버로 보내어 대응되는 멜로디를 받아옴.
+
+      var melody = [];    // 멜로디를 누적함
+      var oscillators = {};       // oscillators by human
+      var ai_oscillators = {};    // oscillators by AI
+
+      var timeOutList = [];     // timer를 관리하기 위함.
+      var keyInput = false;     // keyboard.down()이 호출되면 true, keyboard.up()이 호출되면 false
+
+      var clearTimer = function(){
+        timeOutList.forEach(function(timeOut){
+          clearInterval(timeOut);
+        });
+        while(timeOutList.length > 0) {
+          timeOutList.pop();
+        }
+      };
+
+      var note2Frequency = function(note){
+        return ( Math.pow(2, ( note-69 ) / 12) ) * 440.0;
+      }
+
+      // send input from user/ai into web-socket
+      var emitToSocket = function(eventData){
+        console.log(eventData);
+        if (socket) {
+					socket.emit('music_signal', eventData);
+        }
+      }
+
+      // play note
+      var playNote = function(note){
+        var o = context.createOscillator();
+        var g = context.createGain();
+
+        if(!note.frequency){
+          note.frequency = note2Frequency(note.note);
+        }
+        o.frequency.value = note.frequency;
+        o.type = 'triangle';
+        g.gain.value = 0;
+        o.connect(g);
+        g.connect(context.destination);
+
+        g.gain.linearRampToValueAtTime(0, context.currentTime);
+        g.gain.linearRampToValueAtTime(note.velocity / 127, context.currentTime + 0.1);
+
+        o.start(0);
+        ai_oscillators[note.note] = {
+          oscillator: o,
+          gain: g,
+          currentTime: context.currentTime,
+          note: note
+        };
+
+        var eventData = {
+          from: 'ai',
+          note: note.note,
+          time: ai_oscillators[note.note].currentTime,
+          type: 'keyDown'
+
+        };
+        emitToSocket(eventData);
+      };
+
+      // stop note
+      var stopNote = function(note){
+        if(ai_oscillators[note.note]) {
+          ai_oscillators[note.note].gain.gain.linearRampToValueAtTime(ai_oscillators[note.note].gain.gain.value, context.currentTime);
+          ai_oscillators[note.note].gain.gain.linearRampToValueAtTime(0, context.currentTime + 0.1);
+          ai_oscillators[note.note].oscillator.stop(context.currentTime + 0.1);
+
+          var duration = context.currentTime - ai_oscillators[note.note].currentTime;
+
+          var eventData = {
+            from: 'ai',
+            note: note.note,
+            time: ai_oscillators[note.note].currentTime + duration,
+            type: 'keyUp'
+
+          };
+          emitToSocket(eventData);
+
+          delete ai_oscillators[note.note];
+        }
+      };
+
+      var onPauseOffNote = function(mel, minOffset){
+        setTimeout(function(){
+          playNote(mel.note);
+          setTimeout(function(){
+            stopNote(mel.note);
+          }, 1000*(mel.duration));
+        }, 1000*(mel.offset - minOffset));
+      }
+      var melX, offsetX;
+
+      var playMelody = function(melody){
+        var minOffsetNote = melody.reduce(function(prev, curr) {
+            return prev.offset < curr.offset ? prev : curr;
+        });
+
+        melody.forEach(function(mel){
+          onPauseOffNote(mel, minOffsetNote.offset);
+        });
+
+      }
+
+      var makeMelody = function(response){
+        var melody = [];
+
+        response.forEach(function(note){
+          melody.push({
+            note: {
+              note: note.pitch,
+              velocity: note.velocity
+            },
+            offset: note.offset,
+            duration: note.duration
+          });
+        });
+
+        return melody;
+      }
+
+      var emitMelody = function(){
+        var data = [];
+
+        // playMelody(melody);
+
+        melody.forEach(function(mel){
+          mel.pitch = mel.note.note;
+          mel.velocity = mel.note.velocity;
+
+          data.push({
+            pitch: mel.note.note,
+            velocity: mel.note.velocity,
+            duration: mel.duration,
+            offset: mel.offset
+          });
+        });
+        // $.post( "/duet", data).done(function( data ) {
+        //   alert( "Data Loaded: " + data );
+        // });
+        $.ajax({
+          type: "POST",
+          url: '/duet',
+          data: JSON.stringify(data),
+          contentType: "application/json",
+          success: function(response){
+            console.log('response', response);
+
+            var melody = makeMelody(response);
+            playMelody(melody);
+
+          }
+        });
+
+        while(melody.length > 0) {
+            melody.pop();
+        }
+      };
+
+      var keyNoteOn = function(note) {
+        console.log(note);
+        var o = context.createOscillator();
+        var g = context.createGain();
+        o.frequency.value = note.frequency;
+        o.type = 'triangle';
+        g.gain.value = 0;
+        o.connect(g);
+        g.connect(context.destination);
+
+        g.gain.linearRampToValueAtTime(0, context.currentTime);
+        g.gain.linearRampToValueAtTime(note.velocity / 127, context.currentTime + 0.1);
+
+        o.start(0);
+        oscillators[note.note] = {
+          oscillator: o,
+          gain: g,
+          currentTime: context.currentTime,
+          note: note
+        };
+        keyInput = true;
+
+        var eventData = {
+          from: 'user',
+          note: note.note,
+          time: oscillators[note.note].currentTime,
+          type: 'keyDown'
+
+        };
+        emitToSocket(eventData);
+
+        clearTimer();
+      }; 
+
+      var keyNoteOff = function(note) {
+        if(oscillators[note.note]) {
+          oscillators[note.note].gain.gain.linearRampToValueAtTime(oscillators[note.note].gain.gain.value, context.currentTime);
+          oscillators[note.note].gain.gain.linearRampToValueAtTime(0, context.currentTime + 0.1);
+          oscillators[note.note].oscillator.stop(context.currentTime + 0.1);
+
+          var duration = context.currentTime - oscillators[note.note].currentTime;
+          console.log('end', oscillators[note.note], duration);
+
+          melody.push({
+            offset: oscillators[note.note].currentTime,
+            duration: duration,
+            note: oscillators[note.note].note
+          });
+
+          console.log('###', note);
+          var eventData = {
+            from: 'user',
+            note: note.note,
+            time: oscillators[note.note].currentTime + duration,
+            type: 'keyUp'
+
+          };
+          emitToSocket(eventData);
+
+          delete oscillators[note.note];
+        }
+        keyInput = false;
+
+        if(melody.length >= MAX_MELODY_NUM){
+          emitMelody();
+        }
+        else{
+          var tOut = setInterval(function(){
+            if(!keyInput){
+              keyInput = true;
+              emitMelody();
+            }
+          }, MELODY_INTERVAL_SEC * 1000);
+          timeOutList.push(tOut);  
+        }
+      };
+
+      keyboard.down( function(note) {
+        keyNoteOn(note);
+      });
+
+      keyboard.up( function(note) {
+        keyNoteOff(note);
+      });
+
+      function noteOn( note, velocity ) {
+        var noteData = {
+          note: note,
+          frequency: note2Frequency(note),
+          velocity: 127,
+          isActive: true
+        };
+        keyNoteOn(noteData);
+      }
+
+      function noteOff( note ) {
+        var noteData = {
+          note: note,
+          frequency: note2Frequency(note),
+          velocity: 127,
+          isActive: true
+        };
+        keyNoteOff(noteData);
+      }
+
+      function midiMessageReceived( ev ) {
+        var cmd = ev.data[0] >> 4;
+        var channel = ev.data[0] & 0xf;
+        var noteNumber = ev.data[1];
+        var velocity = ev.data[2];
+
+        if (channel == 9)
+          return
+        if ( cmd==8 || ((cmd==9)&&(velocity==0)) ) { // with MIDI, note on with velocity zero is the same as note off
+          // note off
+          noteOff( noteNumber );
+        } else if (cmd == 9) {
+          // note on
+          noteOn( noteNumber, velocity/127.0);
+        } 
+      }
+
+      var selectMIDI = null;
+      var midiAccess = null;
+      var midiIn = null;
+
+      function selectMIDIIn( ev ) {
+        if (midiIn)
+          midiIn.onmidimessage = null;
+        var id = ev.target[ev.target.selectedIndex].value;
+        if ((typeof(midiAccess.inputs) == "function"))   //Old Skool MIDI inputs() code
+          midiIn = midiAccess.inputs()[ev.target.selectedIndex];
+        else
+          midiIn = midiAccess.inputs.get(id);
+        if (midiIn)
+          midiIn.onmidimessage = midiMessageReceived;
+      }
+
+      function populateMIDIInSelect() {
+        // clear the MIDI input select
+        // selectMIDI.options.length = 0;
+        if (midiIn && midiIn.state=="disconnected")
+          midiIn=null;
+        var firstInput = null;
+
+        var inputs=midiAccess.inputs.values();
+        for ( var input = inputs.next(); input && !input.done; input = inputs.next()){
+          input = input.value;
+          if (!firstInput)
+            firstInput=input;
+          var str=input.name.toString();
+          var preferred = !midiIn && ((str.indexOf("MPK") != -1)||(str.indexOf("Keyboard") != -1)||(str.indexOf("keyboard") != -1)||(str.indexOf("KEYBOARD") != -1));
+
+          // if we're rebuilding the list, but we already had this port open, reselect it.
+          if (midiIn && midiIn==input)
+            preferred = true;
+
+          // selectMIDI.appendChild(new Option(input.name,input.id,preferred,preferred));
+          if (preferred) {
+            midiIn = input;
+            midiIn.onmidimessage = midiMessageReceived;
+          }
+        }
+        if (!midiIn) {
+            midiIn = firstInput;
+            if (midiIn)
+              midiIn.onmidimessage = midiMessageReceived;
+        }
+      }
+
+      function midiConnectionStateChange( e ) {
+        console.log("connection: " + e.port.name + " " + e.port.connection + " " + e.port.state );
+        populateMIDIInSelect();
+      }
+
+      function onMIDIStarted( midi ) {
+        var preferredIndex = 0;
+
+        midiAccess = midi;
+
+        // document.getElementById("synthbox").className = "loaded";
+        // selectMIDI=document.getElementById("midiIn");
+        midi.onstatechange = midiConnectionStateChange;
+        populateMIDIInSelect();
+        // selectMIDI.onchange = selectMIDIIn;
+      }
+
+      function onMIDISystemError( err ) {
+        document.getElementById("synthbox").className = "error";
+        console.log( "MIDI not initialized - error encountered:" + err.code );
+      }
+
+    </script>
+  </body>
+</html>
