@@ -5,6 +5,7 @@
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.js"></script>
 
     <script src="js/platform.js"></script>
+
     <!-- <script type="text/javascript" src="js/midi.js"></script>
     <script type="text/javascript" src="js/waveshaper.js"></script>
     <script type="text/javascript" src="js/synth.js"></script> -->
@@ -71,7 +72,7 @@
 
       window.context  = new AudioContext();
       window.keyboard = new AudioKeys({
-        polyphony: 1,
+        polyphony: 1, 
         rows: 1,
         priority: 'last'
       });
@@ -98,8 +99,8 @@
         keyboard.set('priority', e.target.value);
       });
 
-      var MAX_MELODY_NUM = 10;  // 키보드 입력이 10개가 누적되면 서버로 보내어 대응되는 멜로디를 받아옴.
-      var MELODY_INTERVAL_SEC = 3;    // 3초가 키보드 입력이 없으면 그 동안 쌓아놓은 멜로디를 서버로 보내어 대응되는 멜로디를 받아옴.
+      var MAX_MELODY_NUM = 100000;  // 키보드 입력이 10개가 누적되면 서버로 보내어 대응되는 멜로디를 받아옴.
+      var MELODY_INTERVAL_SEC = 2;    // 3초가 키보드 입력이 없으면 그 동안 쌓아놓은 멜로디를 서버로 보내어 대응되는 멜로디를 받아옴.
 
       var melody = [];    // 멜로디를 누적함
       var oscillators = {};       // oscillators by human
@@ -325,18 +326,18 @@
         }
         keyInput = false;
 
-        if(melody.length >= MAX_MELODY_NUM){
-          emitMelody();
-        }
-        else{
-          var tOut = setInterval(function(){
-            if(!keyInput){
-              keyInput = true;
-              emitMelody();
-            }
-          }, MELODY_INTERVAL_SEC * 1000);
-          timeOutList.push(tOut);  
-        }
+        // if(melody.length >= MAX_MELODY_NUM){
+        //   emitMelody();
+        // }
+        // else{
+        //   var tOut = setInterval(function(){
+        //     if(!keyInput){
+        //       keyInput = true;
+        //       emitMelody();
+        //     }
+        //   }, MELODY_INTERVAL_SEC * 1000);
+        //   timeOutList.push(tOut);  
+        // }
       };
 
       keyboard.down( function(note) {
@@ -455,5 +456,7 @@
       }
 
     </script>
+    <script src="js/note_handler.js"></script>
+    
   </body>
 </html>
