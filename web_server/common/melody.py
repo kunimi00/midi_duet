@@ -96,19 +96,18 @@ class Melody:
         input_melody_parsed = []
         _offset = input_melody[0]['offset']
         
-        for x in input_melody:
-            x['note'] = x['pitch']
+        note_in_a_measure = []
+        for p in input_melody:
+            note_in_a_measure.append(p['pitch'])
 
         offset_in_a_measure = []
         for o in input_melody:
             offset_in_a_measure.append(round((_offset - o['offset'])/0.25))
 
-        input_melody_parsed = []
-
         for i in range(1, len(input_melody)):
             if offset_in_a_measure[i] > offset_in_a_measure[i-1]:
                 tmp_dict = dict()
-                tmp_dict['note'] = input_melody[i]['note']
+                tmp_dict['note'] = note_in_a_measure[i] - note_in_a_measure[i-1]
                 tmp_dict['offset'] = (offset_in_a_measure[i] * 0.25)
 
                 input_melody_parsed.append(tmp_dict)
@@ -164,23 +163,24 @@ class Melody:
 
         print(input_melody)
 
-
-        # curve_arr = create_curve_seq(input_melody)
-        curve_arr = create_curve_seq(input_melody_parsed)
-        output_sequence = predict_output(curve_arr, sequence_length)
-
         output_note_sequence = []
-        curr_note = input_melody_parsed[0]['note']
+        curve_arr = create_curve_seq(input_melody_parsed)
 
-        for vec in output_sequence:
-            curr_note_info = dict()
-            curr_note_info['pitch'] = curr_note + vec[0] 
-            curr_note_info['offset'] = curr_offset + vec[1]
-            curr_note_info['duration'] = 0.5
-            curr_note_info['velocity'] = 120
+        if len(input_melody_parsed) > 0:
+            output_sequence = predict_output(curve_arr, sequence_length)
 
-            output_note_sequence.append(curr_note_info)
+            curr_note = input_melody[0]['pitch']
+            curr_offset = input_melody[0]['offset']
+            
+            for vec in output_sequence:
+                curr_note_info = dict()
+                curr_note_info['pitch'] = curr_note + vec[0] 
+                curr_offset += vec[1]
+                curr_note_info['offset'] = curr_offset
+                curr_note_info['duration'] = 0.5
+                curr_note_info['velocity'] = 120
 
+                output_note_sequence.append(curr_note_info)
 
         return output_note_sequence
 
