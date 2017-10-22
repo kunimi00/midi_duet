@@ -73,6 +73,19 @@ class Melody:
         self.duration = duration
         self.offset = offset
         self.velocity = velocity
+
+        with tf.Session() as sess:
+            model = model_RNN(sess,
+                                batch_size=1,
+                                learning_rate=0.001,
+                                num_layers=3,
+                                num_vocab=vocab_size,
+                                hidden_layer_units=64,
+                                sequence_length=8,
+                                data_dir='generation_model/preprocessed_data/',
+                                checkpoint_dir='generation_model/checkpoint/')
+        self.model = model
+
         pass
 
     @classmethod
@@ -160,6 +173,91 @@ class Melody:
 
 
                 output_sequence = model.predict(np.array(input_sequence_as_batches), mel_i_v)
+
+                print('output_sequence', output_sequence)
+
+                return output_sequence
+
+            
+            curve_arr = create_curve_seq(input_melody_parsed)
+
+        
+            output_sequence = predict_output(curve_arr, sequence_length)
+
+            curr_note = input_melody[0]['pitch']
+            curr_offset = input_melody[0]['offset']
+            
+            for vec in output_sequence:
+                curr_note_info = dict()
+                curr_note_info['pitch'] = curr_note + vec[0] 
+                curr_offset += vec[1]
+                curr_note_info['offset'] = curr_offset
+                curr_note_info['duration'] = 0.25
+                curr_note_info['velocity'] = 120
+
+                output_note_sequence.append(curr_note_info)
+	
+        print('input melody:', input_melody)
+        print('output note sequence:', output_note_sequence)
+        return output_note_sequence
+
+    def genSequence(self, input_melody, measureInSec=None, elementsPerMeasure=None):
+        # add note vlaue
+        input_melody_parsed = []
+        output_note_sequence = []
+        
+        if len(input_melody) > 0 :
+            _offset = input_melody[0]['offset']
+        
+            note_in_a_measure = []
+            for p in input_melody:
+                note_in_a_measure.append(p['pitch'])
+
+            offset_in_a_measure = []
+            for o in input_melody:
+                offset_in_a_measure.append(round((o['offset']-_offset)/0.25))
+            print('offset_in_a_measure : ', offset_in_a_measure)
+            for i in range(1, len(input_melody)):
+                if offset_in_a_measure[i] > offset_in_a_measure[i-1]:
+                    tmp_dict = dict()
+                    tmp_dict['note'] = note_in_a_measure[i] - note_in_a_measure[i-1]
+                    tmp_dict['offset'] = (offset_in_a_measure[i] * 0.25)
+
+                    input_melody_parsed.append(tmp_dict)
+            
+            print('parsed input:', input_melody_parsed)
+
+            ## prepare as an batch
+            def get_input_batch_sequence(input_seq, sequence_length):
+
+                input_sequence_batches = []
+
+                num_seqs_per_song = max(int((len(input_seq) / sequence_length)) - 1, 1)
+
+                for ns in range(num_seqs_per_song):
+                    batch = np.expand_dims(input_seq[ns * sequence_length:(ns + 1) * sequence_length], axis=0)
+                    input_sequence_batches.append(batch)
+
+                return np.array(input_sequence_batches)
+
+            def predict_output(curve_arr, sequence_length=8):
+
+                ## prepare user input sequence with existing vocab in melody set
+                user_input_sequence = []
+                for curve in curve_arr:
+                    similar_curve = find_similar_curve(curve, mel_set)
+                    user_input_sequence.append(similar_curve)
+
+                print(user_input_sequence)
+
+                ## pad zeros to the user input sequence
+                if len(user_input_sequence) < sequence_length:
+                    user_input_sequence += [0] * (sequence_length - len(user_input_sequence))
+                    # user_input_sequence += user_input_sequence + user_input_sequence
+
+                input_sequence_as_batches = get_input_batch_sequence(user_input_sequence, sequence_length)
+
+                output_sequence = self.model.predict(np.array(input_sequence_as_batches), mel_i_v)
 
                 print('output_sequence', output_sequence)
 

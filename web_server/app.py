@@ -55,6 +55,9 @@ def root():
 def recv_test():
     return app.send_static_file('receiver.html')
 
+
+
+melody = Melody()
 @app.route('/duet', methods=['POST'])
 def duet():
     '''
@@ -75,6 +78,8 @@ def duet():
     # char_rnn_melody = Melody.createCharRNNSequence(input_melody)
     char_rnn_melody = Melody.createCharGenerationSequence(input_melody)
 
+    # char_rnn_melody = melody.genSequence(input_melody)
+
     return jsonify(char_rnn_melody)
     # return jsonify(dummy_melody)
 
@@ -89,7 +94,7 @@ def connect():
 
 @socketio.on('start', namespace='/visual')
 def connect(d):
-    print('start', d);
+    # print('start', d);
     emit('started', d, broadcast=True)
 
 @socketio.on('disconnect', namespace='/visual')
@@ -98,7 +103,7 @@ def disconnect():
 
 @socketio.on('music_signal', namespace='/visual')
 def receiveSignal(signal):
-    print('music_signal', signal)
+    # print('music_signal', signal)
     emit('music_signal', signal, broadcast=True)
 
 if __name__ == '__main__':

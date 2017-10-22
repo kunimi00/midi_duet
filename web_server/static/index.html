@@ -132,6 +132,9 @@
 
       // play note
       var playNote = function(note){
+        if(ai_oscillators[note.note]){
+          return;
+        }
         var o = context.createOscillator();
         var g = context.createGain();
 
@@ -184,6 +187,8 @@
           emitToSocket(eventData);
 
           delete ai_oscillators[note.note];
+
+          ai_oscillators[note.note] = null;
         }
       };
 
@@ -198,14 +203,15 @@
       var melX, offsetX;
 
       var playMelody = function(melody){
-        var minOffsetNote = melody.reduce(function(prev, curr) {
+        if(melody && melody.length > 0){
+          var minOffsetNote = melody.reduce(function(prev, curr) {
             return prev.offset < curr.offset ? prev : curr;
-        });
+          });
 
-        melody.forEach(function(mel){
-          onPauseOffNote(mel, minOffsetNote.offset);
-        });
-
+          melody.forEach(function(mel){
+            onPauseOffNote(mel, minOffsetNote.offset);
+          });
+        }
       }
 
       var makeMelody = function(response){
@@ -244,19 +250,23 @@
         // $.post( "/duet", data).done(function( data ) {
         //   alert( "Data Loaded: " + data );
         // });
-        $.ajax({
-          type: "POST",
-          url: '/duet',
-          data: JSON.stringify(data),
-          contentType: "application/json",
-          success: function(response){
-            console.log('response', response);
 
-            var melody = makeMelody(response);
-            playMelody(melody);
+        if(data.length > 0){
+          $.ajax({
+            type: "POST",
+            url: '/duet',
+            data: JSON.stringify(data),
+            contentType: "application/json",
+            success: function(response){
+              console.log('response', response);
 
-          }
-        });
+              var melody = makeMelody(response);
+              playMelody(melody);
+
+            }
+          });
+        }
+        
 
         while(melody.length > 0) {
             melody.pop();
