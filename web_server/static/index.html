@@ -63,7 +63,8 @@
           navigator.requestMIDIAccess().then( onMIDIStarted, onMIDISystemError );
 
 
-				socket = io.connect('/visual');
+				// socket = io.connect('/visual');
+        socket = io.connect('http://localhost:5000/visual');
 				socket.on('music_signal', function (data) {
 					console.log(data);  
 				});
