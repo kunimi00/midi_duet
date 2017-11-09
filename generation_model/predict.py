@@ -6,8 +6,8 @@ import tensorflow as tf
 import pickle
 import numpy as np
 
-from generation_model.model import model_RNN
-from generation_model.mel_op import *
+from model import model_RNN
+from mel_op import *
 
 
 parser = argparse.ArgumentParser(description='')
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     with open(data_dir + "curve_arr_list.p", "rb") as fp:   
         curve_arr_list = pickle.load(fp)
 
-    user_input_file = 'data/midi_gt_solo/G_Scarred.mid'
+    user_input_file = 'data/melody/ashover17.mid'
     midi_obj = music21.converter.parse(user_input_file)
     mel_data = create_mel_data_each_file(midi_obj)
     mel_arr = []

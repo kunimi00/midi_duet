@@ -1,0 +1,3 @@
+model_checkpoint_path: "melodyRNN.model-2"
+all_model_checkpoint_paths: "melodyRNN.model-1"
+all_model_checkpoint_paths: "melodyRNN.model-2"

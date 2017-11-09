@@ -3,7 +3,7 @@ import os
 import pickle
 import argparse
 
-from generation_model.mel_op import *
+from mel_op import *
 
 if __name__ == "__main__":
 
@@ -17,7 +17,7 @@ if __name__ == "__main__":
     if args.loadpre == False:
 
         file_list = []
-        data_path = './data/midi_gt_solo/'
+        data_path = './data/melody/'
 
         for file_name in os.listdir(data_path):
             if file_name.endswith('.mid') or file_name.endswith('.midi'):
